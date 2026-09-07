@@ -1,5 +1,10 @@
 --TEST--
 KafkaConsumer::getRebalanceProtocol() returns "NONE" before group join
+--SKIPIF--
+<?php
+if (!method_exists('RdKafka\KafkaConsumer', 'getRebalanceProtocol')) {
+    die('skip getRebalanceProtocol() not available in this librdkafka build');
+}
 --FILE--
 <?php
 
