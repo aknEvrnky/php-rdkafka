@@ -89,7 +89,7 @@ php-rdkafka 7.x requires PHP 8.1 or later. PHP 7.x is no longer supported.
 
 librdkafka 1.5.3 is the new minimum. Versions older than 1.5.3 are not supported.
 
-### Previously conditional methods are now always available
+### Methods that were conditional in 6.x are now always available
 
 The following methods were only compiled in when the build-time librdkafka was sufficiently new. They are now unconditionally available (librdkafka 1.5.3 supports all of them):
 
@@ -103,7 +103,18 @@ The following methods were only compiled in when the build-time librdkafka was s
 | `RdKafka\KafkaConsumer` | `getControllerId()` |
 | `RdKafka\ProducerTopic` | `producev()` |
 
-If your code checked `method_exists()` before calling any of these, those guards can be removed.
+If your code checked `method_exists()` before calling a method in this table, that guard can be removed.
+
+### Some methods are not available with older librdkafka
+
+The following methods are registered only when php-rdkafka is built with librdkafka 1.6.0 or newer:
+
+| Class | Method |
+|-------|--------|
+| `RdKafka\KafkaConsumer` | `incrementalAssign()`, `incrementalUnassign()` |
+| `RdKafka\KafkaConsumer` | `getRebalanceProtocol()` |
+
+Use `method_exists()` if your code must also work with builds made against an older librdkafka.
 
 ### New methods on `KafkaConsumer`
 
