@@ -27,7 +27,7 @@ if test "$PHP_RDKAFKA" != "no"; then
 
   PHP_ADD_INCLUDE($RDKAFKA_DIR/include)
 
-  SOURCES="rdkafka.c metadata.c metadata_broker.c metadata_topic.c metadata_partition.c metadata_collection.c conf.c topic.c queue.c message.c fun.c kafka_consumer.c topic_partition.c kafka_error_exception.c oauthbearer.c admin_client.c event.c"
+  SOURCES="rdkafka.c metadata.c metadata_broker.c metadata_topic.c metadata_partition.c metadata_collection.c conf.c topic.c queue.c message.c fun.c kafka_consumer.c topic_partition.c kafka_error_exception.c oauthbearer.c admin_client.c event.c consumer_group_metadata.c"
 
   LIBNAME=rdkafka
   LIBSYMBOL=rd_kafka_new
@@ -69,6 +69,24 @@ if test "$PHP_RDKAFKA" != "no"; then
     AC_DEFINE(HAS_RD_KAFKA_DESCRIBE_TOPICS,1,[ ])
   ],[
     AC_MSG_WARN([no rd_kafka_DescribeTopics, DescribeTopics support will not be available])
+  ])
+
+  AC_CHECK_LIB($LIBNAME,[rd_kafka_consumer_group_metadata_new_with_genid],[
+    AC_DEFINE(HAS_RD_KAFKA_CONSUMER_GROUP_METADATA_NEW_WITH_GENID,1,[ ])
+  ],[
+    AC_MSG_WARN([no rd_kafka_consumer_group_metadata_new_with_genid, ConsumerGroupMetadata constructor limited to group_id only (requires librdkafka >= 1.7.0 for full constructor)])
+  ])
+
+  AC_CHECK_LIB($LIBNAME,[rd_kafka_consumer_group_metadata_group_id],[
+    AC_DEFINE(HAS_RD_KAFKA_CONSUMER_GROUP_METADATA_GETTERS,1,[ ])
+  ],[
+    AC_MSG_WARN([no rd_kafka_consumer_group_metadata_group_id, ConsumerGroupMetadata getters not available (requires librdkafka >= 2.8.0)])
+  ])
+
+  AC_CHECK_LIB($LIBNAME,[rd_kafka_rebalance_protocol],[
+    AC_DEFINE(HAS_RD_KAFKA_REBALANCE_PROTOCOL,1,[ ])
+  ],[
+    AC_MSG_WARN([no rd_kafka_rebalance_protocol, KafkaConsumer::getRebalanceProtocol() not available (requires librdkafka >= 1.6.0)])
   ])
 
   LDFLAGS="$ORIG_LDFLAGS"

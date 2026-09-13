@@ -88,4 +88,10 @@ class KafkaConsumer
 
     /** @tentative-return-type */
     public function oauthbearerSetTokenFailure(string $error): void {}
+
+    /** @tentative-return-type */
+    public function getRebalanceProtocol(): string {}
+
+    /** @tentative-return-type */
+    public function getConsumerGroupMetadata(): ConsumerGroupMetadata {}
 }

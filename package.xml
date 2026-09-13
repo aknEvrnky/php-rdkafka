@@ -10,7 +10,8 @@
   <email>arnaud.lb@gmail.com</email>
   <active>yes</active>
  </lead>
- <date>2026-04-20</date>
+ <date>2026-05-07</date>
+ <time>17:42:14</time>
  <version>
   <release>7.0.0alpha1</release>
   <api>7.0.0</api>
@@ -21,10 +22,24 @@
  </stability>
  <license uri="http://opensource.org/licenses/mit-license.php">MIT License</license>
  <notes>
-  ## Bug fixes
-  - Fix php 7.0 build (#563, @arnaud-lb)
-  - Fix x32 build (#565, @arnaud-lb)
-  - Fix segmentation fault in setOauthbearerTokenRefreshCb when sasl.oauthbearer.config is unset (#568, @scorgn)
+  ## Other Changes
+  - Drop unsupported php versions and old librdkafka versions (#559, @arnaud-lb)
+  - Fix types (#560, @arnaud-lb)
+  - Cleanup php 7 compatibility code (#564, @arnaud-lb)
+  - Run workflows on Ubuntu 24 (#583, @arnaud-lb)
+  - SASL_SSL OAUTHBEARER support for high level consumer (#581, @Rastusik)
+  - Docker environment for local development, fix tests so artifacts and helpers don't get deleted (#593, @ralphschindler)
+  - Fix kafka consumer not destroyed in close (#540, @ikeberlein)
+  - add UPGRADE.md  (#594, @ralphschindler)
+  - Fix missing rd_kafka_topic_destroy() in KafkaConsumer::newTopic() destructor (#598, @ralphschindler)
+  - Fix compiler deprecation warnings for rd_kafka_set_logger and rd_kafka_errno2err (#596, @ralphschindler)
+  - KafkaConsumer::consume() returns null on poll timeout (breaking change) (#600, @ralphschindler)
+  - Improve callback tests, remove risky skip (#603, @ralphschindler)
+  - Add TopicPartition::getMetadata() and setMetadata() (#601, @ralphschindler)
+  - Include topic-level properties in Conf::dump() (#602, @ralphschindler)
+  - transactional consume-transform-produce loop (#597, @ralphschindler)
+  - update for pie installation (#604, @ralphschindler)
+  - Fix PIE configure option: needs-value should be true for path-accepting options (#605, @ralphschindler)
  </notes>
  <contents>
   <dir name="/">
@@ -39,6 +54,10 @@
    <file role="src" name="conf.h"/>
    <file role="src" name="conf.stub.php"/>
    <file role="src" name="conf_arginfo.h"/>
+   <file role="src" name="consumer_group_metadata.c"/>
+   <file role="src" name="consumer_group_metadata.h"/>
+   <file role="src" name="consumer_group_metadata.stub.php"/>
+   <file role="src" name="consumer_group_metadata_arginfo.h"/>
    <file role="src" name="config.m4"/>
    <file role="src" name="config.w32"/>
    <file role="src" name="event.c"/>
@@ -132,6 +151,7 @@
      <file role="test" name="integration-tests-check.php"/>
      <file role="test" name="oauth-integration-tests-check.php"/>
     </dir>
+    <file role="test" name="kafka_consumer_get_rebalance_protocol.phpt"/>
     <file role="test" name="kafka_error_exception.phpt"/>
     <file role="test" name="message_headers.phpt"/>
     <file role="test" name="metadata_001.phpt"/>
@@ -148,6 +168,10 @@
     <file role="test" name="produce_consume_transactional.phpt"/>
     <file role="test" name="produce_opaque_noflush_dr_callback.phpt"/>
     <file role="test" name="produce_opaque_noflush.phpt"/>
+    <file role="test" name="consumer_group_metadata_construct_full.phpt"/>
+    <file role="test" name="consumer_group_metadata_construct_getters.phpt"/>
+    <file role="test" name="consumer_group_metadata_debug_info.phpt"/>
+    <file role="test" name="produce_consume_transactional_send_offsets.phpt"/>
     <file role="test" name="produce_opaque.phpt"/>
     <file role="test" name="produce_opaque_purge_dr_callback.phpt"/>
     <file role="test" name="produce_opaque_purge.phpt"/>
@@ -177,6 +201,25 @@
    <configureoption name="with-rdkafka" default="autodetect" prompt="librdkafka installation path?"/>
  </extsrcrelease>
  <changelog>
+  <release>
+   <date>2024-11-04</date>
+   <time>11:24:15</time>
+   <version>
+    <release>6.0.5</release>
+    <api>6.0.0</api>
+   </version>
+   <stability>
+    <release>stable</release>
+    <api>stable</api>
+   </stability>
+   <license uri="http://opensource.org/licenses/mit-license.php">MIT License</license>
+   <notes>
+    ## Bug fixes
+    - Fix php 7.0 build (#563, @arnaud-lb)
+    - Fix x32 build (#565, @arnaud-lb)
+    - Fix segmentation fault in setOauthbearerTokenRefreshCb when sasl.oauthbearer.config is unset (#568, @scorgn)
+   </notes>
+  </release>
   <release>
    <date>2024-10-24</date>
    <time>14:56:47</time>

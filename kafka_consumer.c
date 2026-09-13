@@ -32,6 +32,7 @@
 #include "message.h"
 #include "metadata.h"
 #include "oauthbearer.h"
+#include "consumer_group_metadata.h"
 #include "kafka_consumer_arginfo.h"
 
 typedef struct _object_intern {
@@ -943,6 +944,50 @@ PHP_METHOD(RdKafka_KafkaConsumer, oauthbearerSetTokenFailure)
 }
 /* }}} */
 
+#ifdef HAS_RD_KAFKA_REBALANCE_PROTOCOL
+/* {{{ proto string RdKafka\KafkaConsumer::getRebalanceProtocol()
+   Returns the current consumer group rebalance protocol ("NONE", "EAGER", or "COOPERATIVE") */
+PHP_METHOD(RdKafka_KafkaConsumer, getRebalanceProtocol)
+{
+    object_intern *intern;
+
+    ZEND_PARSE_PARAMETERS_NONE();
+
+    intern = get_object(getThis());
+    if (!intern) {
+        return;
+    }
+
+    RETURN_STRING(rd_kafka_rebalance_protocol(intern->rk));
+}
+/* }}} */
+#endif
+
+/* {{{ proto RdKafka\ConsumerGroupMetadata RdKafka\KafkaConsumer::getConsumerGroupMetadata() */
+PHP_METHOD(RdKafka_KafkaConsumer, getConsumerGroupMetadata)
+{
+    object_intern *intern;
+    kafka_consumer_group_metadata_object *cgmd_intern;
+    rd_kafka_consumer_group_metadata_t *cgmd;
+
+    intern = get_object(getThis());
+    if (!intern) {
+        return;
+    }
+
+    cgmd = rd_kafka_consumer_group_metadata(intern->rk);
+
+    if (!cgmd) {
+        zend_throw_exception(ce_kafka_exception, "Failed to get consumer group metadata", 0);
+        return;
+    }
+
+    object_init_ex(return_value, ce_kafka_consumer_group_metadata);
+    cgmd_intern = Z_RDKAFKA_P(kafka_consumer_group_metadata_object, return_value);
+    cgmd_intern->cgmd = cgmd;
+}
+/* }}} */
+
 void kafka_kafka_consumer_minit(INIT_FUNC_ARGS) /* {{{ */
 {
     ce = register_class_RdKafka_KafkaConsumer();
@@ -950,5 +995,5 @@ void kafka_kafka_consumer_minit(INIT_FUNC_ARGS) /* {{{ */
 
     handlers = kafka_default_object_handlers;
     handlers.free_obj = kafka_consumer_free;
-    handlers.offset = XtOffsetOf(object_intern, std);
+    handlers.offset = offsetof(object_intern, std);
 } /* }}} */
