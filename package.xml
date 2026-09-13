@@ -121,6 +121,7 @@
    <dir name="tests">
     <file role="test" name="admin_001_dtos.phpt"/>
     <file role="test" name="admin_002_event.phpt"/>
+    <file role="test" name="admin_003_cross_handle.phpt"/>
     <file role="test" name="admin_create_delete_topics.phpt"/>
     <file role="test" name="admin_create_partitions.phpt"/>
     <file role="test" name="admin_delete_records.phpt"/>

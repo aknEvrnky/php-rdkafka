@@ -351,7 +351,11 @@ PHP_METHOD(RdKafka, newAdminOptions)
         return;
     }
 
-    object_init_ex(return_value, ce_kafka_admin_options);
+    if (object_init_ex(return_value, ce_kafka_admin_options) != SUCCESS) {
+        rd_kafka_AdminOptions_destroy(options);
+        return;
+    }
+
     options_intern = get_admin_options_object(return_value);
     options_intern->options = options;
     ZVAL_COPY(&options_intern->zrk, getThis());
@@ -406,6 +410,47 @@ static int rdkafka_admin_resolve_args(zval *this_ptr, zval *zqueue, zval *zoptio
     return 1;
 }
 
+/* Collect C pointers from a PHP array of interned admin DTOs. The intern
+ * struct must start with the librdkafka pointer. Returns NULL after throwing. */
+static void **rdkafka_admin_collect_c_ptrs(zval *zarr, zend_class_entry *ce, size_t std_offset,
+    const char *empty_msg, const char *type_msg, const char *uninit_msg, size_t *out_cnt)
+{
+    size_t cnt, i = 0;
+    zval *zitem;
+    void **ptrs;
+
+    cnt = zend_hash_num_elements(Z_ARRVAL_P(zarr));
+    if (cnt == 0) {
+        zend_throw_exception(ce_kafka_exception, empty_msg, 0);
+        return NULL;
+    }
+
+    ptrs = ecalloc(cnt, sizeof(void *));
+
+    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(zarr), zitem) {
+        void *intern;
+        void *cptr;
+
+        if (Z_TYPE_P(zitem) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(zitem), ce)) {
+            zend_throw_exception(ce_kafka_exception, type_msg, 0);
+            efree(ptrs);
+            return NULL;
+        }
+
+        intern = (char *)Z_OBJ_P(zitem) - std_offset;
+        cptr = *(void **)intern;
+        if (!cptr) {
+            zend_throw_exception(ce_kafka_exception, uninit_msg, 0);
+            efree(ptrs);
+            return NULL;
+        }
+        ptrs[i++] = cptr;
+    } ZEND_HASH_FOREACH_END();
+
+    *out_cnt = cnt;
+    return ptrs;
+}
+
 /* {{{ proto void RdKafka::createTopics(array $new_topics, RdKafka\Queue $queue, ?RdKafka\Admin\AdminOptions $options = null)
    Submit a CreateTopics admin request. The result event is delivered to $queue. */
 PHP_METHOD(RdKafka, createTopics)
@@ -414,10 +459,8 @@ PHP_METHOD(RdKafka, createTopics)
     kafka_object *intern;
     rd_kafka_queue_t *queue;
     rd_kafka_AdminOptions_t *options;
-    rd_kafka_NewTopic_t **new_topics = NULL;
+    rd_kafka_NewTopic_t **new_topics;
     size_t new_topic_cnt;
-    zval *zitem;
-    size_t i = 0;
 
     if (zend_parse_parameters(ZEND_NUM_ARGS(), "aO|O!",
             &znew_topics,
@@ -430,28 +473,15 @@ PHP_METHOD(RdKafka, createTopics)
         return;
     }
 
-    new_topic_cnt = zend_hash_num_elements(Z_ARRVAL_P(znew_topics));
-    if (new_topic_cnt == 0) {
-        zend_throw_exception(ce_kafka_exception, "new_topics array must not be empty", 0);
+    new_topics = (rd_kafka_NewTopic_t **)rdkafka_admin_collect_c_ptrs(znew_topics, ce_kafka_new_topic,
+        offsetof(kafka_new_topic_object, std),
+        "new_topics array must not be empty",
+        "All items in new_topics must be instances of RdKafka\\Admin\\NewTopic",
+        "NewTopic object is not properly initialized",
+        &new_topic_cnt);
+    if (!new_topics) {
         return;
     }
-
-    new_topics = ecalloc(new_topic_cnt, sizeof(rd_kafka_NewTopic_t*));
-
-    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(znew_topics), zitem) {
-        if (Z_TYPE_P(zitem) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(zitem), ce_kafka_new_topic)) {
-            zend_throw_exception(ce_kafka_exception, "All items in new_topics must be instances of RdKafka\\Admin\\NewTopic", 0);
-            efree(new_topics);
-            return;
-        }
-        kafka_new_topic_object *topic_intern = get_new_topic_object(zitem);
-        if (!topic_intern->new_topic) {
-            zend_throw_exception(ce_kafka_exception, "NewTopic object is not properly initialized", 0);
-            efree(new_topics);
-            return;
-        }
-        new_topics[i++] = topic_intern->new_topic;
-    } ZEND_HASH_FOREACH_END();
 
     rd_kafka_CreateTopics(intern->rk, new_topics, new_topic_cnt, options, queue);
 
@@ -467,10 +497,8 @@ PHP_METHOD(RdKafka, deleteTopics)
     kafka_object *intern;
     rd_kafka_queue_t *queue;
     rd_kafka_AdminOptions_t *options;
-    rd_kafka_DeleteTopic_t **delete_topics = NULL;
+    rd_kafka_DeleteTopic_t **delete_topics;
     size_t delete_topic_cnt;
-    zval *zitem;
-    size_t i = 0;
 
     if (zend_parse_parameters(ZEND_NUM_ARGS(), "aO|O!",
             &zdelete_topics,
@@ -483,28 +511,15 @@ PHP_METHOD(RdKafka, deleteTopics)
         return;
     }
 
-    delete_topic_cnt = zend_hash_num_elements(Z_ARRVAL_P(zdelete_topics));
-    if (delete_topic_cnt == 0) {
-        zend_throw_exception(ce_kafka_exception, "delete_topics array must not be empty", 0);
+    delete_topics = (rd_kafka_DeleteTopic_t **)rdkafka_admin_collect_c_ptrs(zdelete_topics, ce_kafka_delete_topic,
+        offsetof(kafka_delete_topic_object, std),
+        "delete_topics array must not be empty",
+        "All items in delete_topics must be instances of RdKafka\\Admin\\DeleteTopic",
+        "DeleteTopic object is not properly initialized",
+        &delete_topic_cnt);
+    if (!delete_topics) {
         return;
     }
-
-    delete_topics = ecalloc(delete_topic_cnt, sizeof(rd_kafka_DeleteTopic_t*));
-
-    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(zdelete_topics), zitem) {
-        if (Z_TYPE_P(zitem) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(zitem), ce_kafka_delete_topic)) {
-            zend_throw_exception(ce_kafka_exception, "All items in delete_topics must be instances of RdKafka\\Admin\\DeleteTopic", 0);
-            efree(delete_topics);
-            return;
-        }
-        kafka_delete_topic_object *topic_intern = get_delete_topic_object(zitem);
-        if (!topic_intern->delete_topic) {
-            zend_throw_exception(ce_kafka_exception, "DeleteTopic object is not properly initialized", 0);
-            efree(delete_topics);
-            return;
-        }
-        delete_topics[i++] = topic_intern->delete_topic;
-    } ZEND_HASH_FOREACH_END();
 
     rd_kafka_DeleteTopics(intern->rk, delete_topics, delete_topic_cnt, options, queue);
 
@@ -520,10 +535,8 @@ PHP_METHOD(RdKafka, createPartitions)
     kafka_object *intern;
     rd_kafka_queue_t *queue;
     rd_kafka_AdminOptions_t *options;
-    rd_kafka_NewPartitions_t **new_partitions = NULL;
+    rd_kafka_NewPartitions_t **new_partitions;
     size_t new_partitions_cnt;
-    zval *zitem;
-    size_t i = 0;
 
     if (zend_parse_parameters(ZEND_NUM_ARGS(), "aO|O!",
             &znew_partitions,
@@ -536,28 +549,15 @@ PHP_METHOD(RdKafka, createPartitions)
         return;
     }
 
-    new_partitions_cnt = zend_hash_num_elements(Z_ARRVAL_P(znew_partitions));
-    if (new_partitions_cnt == 0) {
-        zend_throw_exception(ce_kafka_exception, "new_partitions array must not be empty", 0);
+    new_partitions = (rd_kafka_NewPartitions_t **)rdkafka_admin_collect_c_ptrs(znew_partitions, ce_kafka_new_partitions,
+        offsetof(kafka_new_partitions_object, std),
+        "new_partitions array must not be empty",
+        "All items in new_partitions must be instances of RdKafka\\Admin\\NewPartitions",
+        "NewPartitions object is not properly initialized",
+        &new_partitions_cnt);
+    if (!new_partitions) {
         return;
     }
-
-    new_partitions = ecalloc(new_partitions_cnt, sizeof(rd_kafka_NewPartitions_t*));
-
-    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(znew_partitions), zitem) {
-        if (Z_TYPE_P(zitem) != IS_OBJECT || !instanceof_function(Z_OBJCE_P(zitem), ce_kafka_new_partitions)) {
-            zend_throw_exception(ce_kafka_exception, "All items in new_partitions must be instances of RdKafka\\Admin\\NewPartitions", 0);
-            efree(new_partitions);
-            return;
-        }
-        kafka_new_partitions_object *part_intern = get_new_partitions_object(zitem);
-        if (!part_intern->new_partitions) {
-            zend_throw_exception(ce_kafka_exception, "NewPartitions object is not properly initialized", 0);
-            efree(new_partitions);
-            return;
-        }
-        new_partitions[i++] = part_intern->new_partitions;
-    } ZEND_HASH_FOREACH_END();
 
     rd_kafka_CreatePartitions(intern->rk, new_partitions, new_partitions_cnt, options, queue);
 
