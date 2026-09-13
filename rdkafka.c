@@ -306,11 +306,13 @@ PHP_METHOD(RdKafka, newQueue)
     }
 
     if (object_init_ex(return_value, ce_kafka_queue) != SUCCESS) {
+        rd_kafka_queue_destroy(rkqu);
         return;
     }
 
     queue_intern = Z_RDKAFKA_P(kafka_queue_object, return_value);
     if (!queue_intern) {
+        rd_kafka_queue_destroy(rkqu);
         return;
     }
 

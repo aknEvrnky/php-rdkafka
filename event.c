@@ -318,7 +318,13 @@ PHP_METHOD(RdKafka_Event, getDescribeTopicsResult)
     array_init_size(return_value, result_cnt);
     for (i = 0; i < result_cnt; i++) {
         zval desc_zv;
+        ZVAL_UNDEF(&desc_zv);
         kafka_topic_description_to_zval(&desc_zv, descriptions[i]);
+        if (EG(exception)) {
+            zval_ptr_dtor(&desc_zv);
+            zval_ptr_dtor(return_value);
+            RETURN_THROWS();
+        }
         add_next_index_zval(return_value, &desc_zv);
     }
 }

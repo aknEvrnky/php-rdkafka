@@ -618,8 +618,10 @@ void kafka_node_array_to_zval(zval *return_value, const rd_kafka_Node_t **nodes,
 
     for (i = 0; i < cnt; i++) {
         zval node_zv;
+        ZVAL_UNDEF(&node_zv);
         kafka_node_to_zval(&node_zv, nodes[i]);
         if (EG(exception)) {
+            zval_ptr_dtor(&node_zv);
             return;
         }
         add_next_index_zval(return_value, &node_zv);
@@ -647,8 +649,10 @@ void kafka_topic_partition_info_to_zval(zval *return_value, const rd_kafka_Topic
     leader = rd_kafka_TopicPartitionInfo_leader(partition);
     if (leader) {
         zval leader_zv;
+        ZVAL_UNDEF(&leader_zv);
         kafka_node_to_zval(&leader_zv, leader);
         if (EG(exception)) {
+            zval_ptr_dtor(&leader_zv);
             return;
         }
         zend_update_property(NULL, Z_OBJ_P(return_value), "leader", sizeof("leader") - 1, &leader_zv);
@@ -729,8 +733,10 @@ void kafka_topic_description_to_zval(zval *return_value, const rd_kafka_TopicDes
     array_init_size(&partitions_zv, partition_cnt);
     for (i = 0; i < partition_cnt; i++) {
         zval part_zv;
+        ZVAL_UNDEF(&part_zv);
         kafka_topic_partition_info_to_zval(&part_zv, partitions[i]);
         if (EG(exception)) {
+            zval_ptr_dtor(&part_zv);
             zval_ptr_dtor(&partitions_zv);
             return;
         }
