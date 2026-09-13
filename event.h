@@ -19,11 +19,12 @@
 
 typedef struct _kafka_event_object {
     rd_kafka_event_t    *rkev;
+    zval                 zrk;
     zend_object         std;
 } kafka_event_object;
 
 void kafka_event_minit(INIT_FUNC_ARGS);
-void kafka_event_new(zval *return_value, rd_kafka_event_t *rkev);
+void kafka_event_new(zval *return_value, rd_kafka_event_t *rkev, zval *zrk);
 
 extern zend_class_entry *ce_kafka_event;
 

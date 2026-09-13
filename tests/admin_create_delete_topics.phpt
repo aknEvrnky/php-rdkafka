@@ -30,7 +30,12 @@ printf("error_string: %s\n", var_export($results[0]->error_string, true));
 printf("error_string (getter): %s\n", var_export($results[0]->getErrorString(), true));
 printf("name matches: %s\n", $results[0]->name === $topicName ? 'true' : 'false');
 printf("name (getter) matches: %s\n", $results[0]->getName() === $topicName ? 'true' : 'false');
+unset($producer, $queue);
+printf("event usable after unset handle: %s\n", $event->getType() === RD_KAFKA_EVENT_CREATETOPICS_RESULT ? 'true' : 'false');
 unset($event);
+
+$producer = new RdKafka\Producer($conf);
+$queue = $producer->newQueue();
 
 // DELETE
 $opts = $producer->newAdminOptions(RD_KAFKA_ADMIN_OP_DELETETOPICS);
@@ -54,6 +59,7 @@ error_string: NULL
 error_string (getter): NULL
 name matches: true
 name (getter) matches: true
+event usable after unset handle: true
 deleteTopics count: 1
 error: 0
 name matches: true

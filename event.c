@@ -41,6 +41,8 @@ static void kafka_event_free(zend_object *object) /* {{{ */
         intern->rkev = NULL;
     }
 
+    zval_ptr_dtor(&intern->zrk);
+
     zend_object_std_dtor(&intern->std);
 }
 /* }}} */
@@ -52,6 +54,7 @@ static zend_object *kafka_event_new_obj(zend_class_entry *class_type) /* {{{ */
     intern = zend_object_alloc(sizeof(*intern), class_type);
     zend_object_std_init(&intern->std, class_type);
     object_properties_init(&intern->std, class_type);
+    ZVAL_UNDEF(&intern->zrk);
 
     intern->std.handlers = &handlers;
 
@@ -72,7 +75,7 @@ static kafka_event_object *get_kafka_event_object(zval *zev) /* {{{ */
 }
 /* }}} */
 
-void kafka_event_new(zval *return_value, rd_kafka_event_t *rkev) /* {{{ */
+void kafka_event_new(zval *return_value, rd_kafka_event_t *rkev, zval *zrk) /* {{{ */
 {
     kafka_event_object *intern;
 
@@ -83,6 +86,7 @@ void kafka_event_new(zval *return_value, rd_kafka_event_t *rkev) /* {{{ */
 
     intern = Z_RDKAFKA_P(kafka_event_object, return_value);
     intern->rkev = rkev;
+    ZVAL_COPY(&intern->zrk, zrk);
 }
 /* }}} */
 
@@ -354,7 +358,7 @@ void kafka_event_minit(INIT_FUNC_ARGS) /* {{{ */
 {
     handlers = kafka_default_object_handlers;
     handlers.free_obj = kafka_event_free;
-    handlers.offset = XtOffsetOf(kafka_event_object, std);
+    handlers.offset = offsetof(kafka_event_object, std);
 
     ce_kafka_event = register_class_RdKafka_Event();
     ce_kafka_event->create_object = kafka_event_new_obj;

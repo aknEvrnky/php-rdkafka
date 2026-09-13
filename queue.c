@@ -139,7 +139,7 @@ PHP_METHOD(RdKafka_Queue, poll)
         return;
     }
 
-    kafka_event_new(return_value, rkev);
+    kafka_event_new(return_value, rkev, &intern->zrk);
 }
 /* }}} */
 
