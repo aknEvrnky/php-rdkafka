@@ -19,6 +19,8 @@
 #ifndef KAFKA_ADMIN_CLIENT_H
 #define KAFKA_ADMIN_CLIENT_H
 
+#include "php_rdkafka_priv.h"
+
 typedef struct _kafka_admin_options_object {
     rd_kafka_AdminOptions_t *options;
     zval                     zrk;
@@ -42,14 +44,10 @@ typedef struct _kafka_new_partitions_object {
 
 void kafka_admin_client_minit(INIT_FUNC_ARGS);
 
-#define get_admin_options_object(zv) \
-    ((kafka_admin_options_object*)((char*)(Z_OBJ_P(zv)) - XtOffsetOf(kafka_admin_options_object, std)))
-#define get_new_topic_object(zv) \
-    ((kafka_new_topic_object*)((char*)(Z_OBJ_P(zv)) - XtOffsetOf(kafka_new_topic_object, std)))
-#define get_delete_topic_object(zv) \
-    ((kafka_delete_topic_object*)((char*)(Z_OBJ_P(zv)) - XtOffsetOf(kafka_delete_topic_object, std)))
-#define get_new_partitions_object(zv) \
-    ((kafka_new_partitions_object*)((char*)(Z_OBJ_P(zv)) - XtOffsetOf(kafka_new_partitions_object, std)))
+#define get_admin_options_object(zv) Z_RDKAFKA_P(kafka_admin_options_object, zv)
+#define get_new_topic_object(zv) Z_RDKAFKA_P(kafka_new_topic_object, zv)
+#define get_delete_topic_object(zv) Z_RDKAFKA_P(kafka_delete_topic_object, zv)
+#define get_new_partitions_object(zv) Z_RDKAFKA_P(kafka_new_partitions_object, zv)
 
 /* Helpers for converting librdkafka admin result structs into PHP values.
  * Used by event.c to expose per-operation result accessors on RdKafka\Event. */

@@ -54,7 +54,7 @@ static zend_object_handlers new_partitions_object_handlers;
 /* {{{ Object create/free: AdminOptions */
 static void admin_options_free(zend_object *object) /* {{{ */
 {
-    kafka_admin_options_object *intern = (kafka_admin_options_object*)((char*)(object) - XtOffsetOf(kafka_admin_options_object, std));
+    kafka_admin_options_object *intern = php_kafka_from_obj(kafka_admin_options_object, object);
 
     if (intern->options) {
         rd_kafka_AdminOptions_destroy(intern->options);
@@ -74,6 +74,8 @@ static zend_object *admin_options_new(zend_class_entry *class_type) /* {{{ */
     intern = zend_object_alloc(sizeof(*intern), class_type);
     zend_object_std_init(&intern->std, class_type);
     object_properties_init(&intern->std, class_type);
+    intern->options = NULL;
+    ZVAL_UNDEF(&intern->zrk);
 
     intern->std.handlers = &admin_options_object_handlers;
 
@@ -84,7 +86,7 @@ static zend_object *admin_options_new(zend_class_entry *class_type) /* {{{ */
 /* {{{ Object create/free: NewTopic */
 static void new_topic_free(zend_object *object) /* {{{ */
 {
-    kafka_new_topic_object *intern = (kafka_new_topic_object*)((char*)(object) - XtOffsetOf(kafka_new_topic_object, std));
+    kafka_new_topic_object *intern = php_kafka_from_obj(kafka_new_topic_object, object);
 
     if (intern->new_topic) {
         rd_kafka_NewTopic_destroy(intern->new_topic);
@@ -112,7 +114,7 @@ static zend_object *new_topic_new(zend_class_entry *class_type) /* {{{ */
 /* {{{ Object create/free: DeleteTopic */
 static void delete_topic_free(zend_object *object) /* {{{ */
 {
-    kafka_delete_topic_object *intern = (kafka_delete_topic_object*)((char*)(object) - XtOffsetOf(kafka_delete_topic_object, std));
+    kafka_delete_topic_object *intern = php_kafka_from_obj(kafka_delete_topic_object, object);
 
     if (intern->delete_topic) {
         rd_kafka_DeleteTopic_destroy(intern->delete_topic);
@@ -140,7 +142,7 @@ static zend_object *delete_topic_new(zend_class_entry *class_type) /* {{{ */
 /* {{{ Object create/free: NewPartitions */
 static void new_partitions_free(zend_object *object) /* {{{ */
 {
-    kafka_new_partitions_object *intern = (kafka_new_partitions_object*)((char*)(object) - XtOffsetOf(kafka_new_partitions_object, std));
+    kafka_new_partitions_object *intern = php_kafka_from_obj(kafka_new_partitions_object, object);
 
     if (intern->new_partitions) {
         rd_kafka_NewPartitions_destroy(intern->new_partitions);
@@ -176,7 +178,10 @@ void kafka_topic_results_to_array(zval *return_value, const rd_kafka_topic_resul
         zval topic_result_zv;
         const rd_kafka_topic_result_t *result = results[i];
 
-        object_init_ex(&topic_result_zv, ce_kafka_topic_result);
+        if (object_init_ex(&topic_result_zv, ce_kafka_topic_result) != SUCCESS) {
+            zend_throw_exception(ce_kafka_exception, "Failed to create TopicResult", 0);
+            return;
+        }
 
         zend_update_property_long(NULL, Z_OBJ(topic_result_zv), "error", sizeof("error") - 1,
             rd_kafka_topic_result_error(result));
@@ -351,6 +356,34 @@ ZEND_METHOD(RdKafka_Admin_NewTopic, __construct)
 }
 /* }}} */
 
+/* Convert a PHP array of integer broker IDs to int32_t*. Returns NULL after throwing. */
+static int32_t *rdkafka_admin_broker_ids_from_array(zval *zbroker_ids, size_t *out_cnt)
+{
+    size_t broker_cnt = zend_hash_num_elements(Z_ARRVAL_P(zbroker_ids));
+    int32_t *broker_ids;
+    zval *zbid;
+    size_t j = 0;
+
+    if (broker_cnt == 0) {
+        zend_throw_exception(ce_kafka_exception, "broker_ids array must not be empty", 0);
+        return NULL;
+    }
+
+    broker_ids = ecalloc(broker_cnt, sizeof(int32_t));
+
+    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(zbroker_ids), zbid) {
+        if (Z_TYPE_P(zbid) != IS_LONG) {
+            zend_throw_exception(ce_kafka_exception, "All items in broker_ids must be integers", 0);
+            efree(broker_ids);
+            return NULL;
+        }
+        broker_ids[j++] = (int32_t)Z_LVAL_P(zbid);
+    } ZEND_HASH_FOREACH_END();
+
+    *out_cnt = broker_cnt;
+    return broker_ids;
+}
+
 /* {{{ NewTopic::setReplicaAssignment(int $partition, array $broker_ids): void */
 ZEND_METHOD(RdKafka_Admin_NewTopic, setReplicaAssignment)
 {
@@ -359,6 +392,8 @@ ZEND_METHOD(RdKafka_Admin_NewTopic, setReplicaAssignment)
     kafka_new_topic_object *intern;
     char errstr[512];
     rd_kafka_resp_err_t err;
+    int32_t *broker_ids;
+    size_t broker_cnt;
 
     if (zend_parse_parameters(ZEND_NUM_ARGS(), "la", &partition, &zbroker_ids) == FAILURE) {
         return;
@@ -370,15 +405,15 @@ ZEND_METHOD(RdKafka_Admin_NewTopic, setReplicaAssignment)
         return;
     }
 
-    /* Convert PHP array to int32_t array */
-    size_t broker_cnt = zend_hash_num_elements(Z_ARRVAL_P(zbroker_ids));
-    int32_t *broker_ids = ecalloc(broker_cnt, sizeof(int32_t));
+    if (partition < 0) {
+        zend_throw_exception(ce_kafka_exception, "partition must not be negative", 0);
+        return;
+    }
 
-    zval *zbid;
-    size_t j = 0;
-    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(zbroker_ids), zbid) {
-        broker_ids[j++] = (int32_t)zval_get_long(zbid);
-    } ZEND_HASH_FOREACH_END();
+    broker_ids = rdkafka_admin_broker_ids_from_array(zbroker_ids, &broker_cnt);
+    if (!broker_ids) {
+        return;
+    }
 
     err = rd_kafka_NewTopic_set_replica_assignment(intern->new_topic, (int32_t)partition, broker_ids, broker_cnt, errstr, sizeof(errstr));
     efree(broker_ids);
@@ -450,6 +485,11 @@ ZEND_METHOD(RdKafka_Admin_NewPartitions, __construct)
 
     intern = get_new_partitions_object(getThis());
 
+    if (new_total_count < 0) {
+        zend_throw_exception(ce_kafka_exception, "new_total_count must not be negative", 0);
+        return;
+    }
+
     intern->new_partitions = rd_kafka_NewPartitions_new(topic, (size_t)new_total_count, errstr, sizeof(errstr));
     if (!intern->new_partitions) {
         zend_throw_exception(ce_kafka_exception, errstr, 0);
@@ -466,6 +506,8 @@ ZEND_METHOD(RdKafka_Admin_NewPartitions, setReplicaAssignment)
     kafka_new_partitions_object *intern;
     char errstr[512];
     rd_kafka_resp_err_t err;
+    int32_t *broker_ids;
+    size_t broker_cnt;
 
     if (zend_parse_parameters(ZEND_NUM_ARGS(), "la", &new_partition_index, &zbroker_ids) == FAILURE) {
         return;
@@ -477,14 +519,15 @@ ZEND_METHOD(RdKafka_Admin_NewPartitions, setReplicaAssignment)
         return;
     }
 
-    size_t broker_cnt = zend_hash_num_elements(Z_ARRVAL_P(zbroker_ids));
-    int32_t *broker_ids = ecalloc(broker_cnt, sizeof(int32_t));
+    if (new_partition_index < 0) {
+        zend_throw_exception(ce_kafka_exception, "new_partition_index must not be negative", 0);
+        return;
+    }
 
-    zval *zbid;
-    size_t j = 0;
-    ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(zbroker_ids), zbid) {
-        broker_ids[j++] = (int32_t)zval_get_long(zbid);
-    } ZEND_HASH_FOREACH_END();
+    broker_ids = rdkafka_admin_broker_ids_from_array(zbroker_ids, &broker_cnt);
+    if (!broker_ids) {
+        return;
+    }
 
     err = rd_kafka_NewPartitions_set_replica_assignment(intern->new_partitions, (int32_t)new_partition_index, broker_ids, broker_cnt, errstr, sizeof(errstr));
     efree(broker_ids);
@@ -546,7 +589,10 @@ void kafka_node_to_zval(zval *return_value, const rd_kafka_Node_t *node)
 {
     const char *rack;
 
-    object_init_ex(return_value, ce_kafka_node);
+    if (object_init_ex(return_value, ce_kafka_node) != SUCCESS) {
+        zend_throw_exception(ce_kafka_exception, "Failed to create Node", 0);
+        return;
+    }
 
     zend_update_property_long(NULL, Z_OBJ_P(return_value), "id", sizeof("id") - 1,
         rd_kafka_Node_id(node));
@@ -573,6 +619,9 @@ void kafka_node_array_to_zval(zval *return_value, const rd_kafka_Node_t **nodes,
     for (i = 0; i < cnt; i++) {
         zval node_zv;
         kafka_node_to_zval(&node_zv, nodes[i]);
+        if (EG(exception)) {
+            return;
+        }
         add_next_index_zval(return_value, &node_zv);
     }
 }
@@ -587,7 +636,10 @@ void kafka_topic_partition_info_to_zval(zval *return_value, const rd_kafka_Topic
     size_t isr_cnt, replica_cnt;
     zval isr_zv, replicas_zv;
 
-    object_init_ex(return_value, ce_kafka_topic_partition_info);
+    if (object_init_ex(return_value, ce_kafka_topic_partition_info) != SUCCESS) {
+        zend_throw_exception(ce_kafka_exception, "Failed to create TopicPartitionInfo", 0);
+        return;
+    }
 
     zend_update_property_long(NULL, Z_OBJ_P(return_value), "partition", sizeof("partition") - 1,
         rd_kafka_TopicPartitionInfo_partition(partition));
@@ -596,6 +648,9 @@ void kafka_topic_partition_info_to_zval(zval *return_value, const rd_kafka_Topic
     if (leader) {
         zval leader_zv;
         kafka_node_to_zval(&leader_zv, leader);
+        if (EG(exception)) {
+            return;
+        }
         zend_update_property(NULL, Z_OBJ_P(return_value), "leader", sizeof("leader") - 1, &leader_zv);
         zval_ptr_dtor(&leader_zv);
     } else {
@@ -604,11 +659,19 @@ void kafka_topic_partition_info_to_zval(zval *return_value, const rd_kafka_Topic
 
     isr_nodes = rd_kafka_TopicPartitionInfo_isr(partition, &isr_cnt);
     kafka_node_array_to_zval(&isr_zv, isr_nodes, isr_cnt);
+    if (EG(exception)) {
+        zval_ptr_dtor(&isr_zv);
+        return;
+    }
     zend_update_property(NULL, Z_OBJ_P(return_value), "isr", sizeof("isr") - 1, &isr_zv);
     zval_ptr_dtor(&isr_zv);
 
     replica_nodes = rd_kafka_TopicPartitionInfo_replicas(partition, &replica_cnt);
     kafka_node_array_to_zval(&replicas_zv, replica_nodes, replica_cnt);
+    if (EG(exception)) {
+        zval_ptr_dtor(&replicas_zv);
+        return;
+    }
     zend_update_property(NULL, Z_OBJ_P(return_value), "replicas", sizeof("replicas") - 1, &replicas_zv);
     zval_ptr_dtor(&replicas_zv);
 }
@@ -624,7 +687,10 @@ void kafka_topic_description_to_zval(zval *return_value, const rd_kafka_TopicDes
     size_t i;
     zval partitions_zv;
 
-    object_init_ex(return_value, ce_kafka_topic_description);
+    if (object_init_ex(return_value, ce_kafka_topic_description) != SUCCESS) {
+        zend_throw_exception(ce_kafka_exception, "Failed to create TopicDescription", 0);
+        return;
+    }
 
     zend_update_property_string(NULL, Z_OBJ_P(return_value), "name", sizeof("name") - 1,
         rd_kafka_TopicDescription_name(topicdesc));
@@ -664,6 +730,10 @@ void kafka_topic_description_to_zval(zval *return_value, const rd_kafka_TopicDes
     for (i = 0; i < partition_cnt; i++) {
         zval part_zv;
         kafka_topic_partition_info_to_zval(&part_zv, partitions[i]);
+        if (EG(exception)) {
+            zval_ptr_dtor(&partitions_zv);
+            return;
+        }
         add_next_index_zval(&partitions_zv, &part_zv);
     }
     zend_update_property(NULL, Z_OBJ_P(return_value), "partitions", sizeof("partitions") - 1, &partitions_zv);
@@ -683,7 +753,7 @@ void kafka_admin_client_minit(INIT_FUNC_ARGS)
     memcpy(&admin_options_object_handlers, &kafka_default_object_handlers, sizeof(zend_object_handlers));
     admin_options_object_handlers.clone_obj = NULL;
     admin_options_object_handlers.free_obj = admin_options_free;
-    admin_options_object_handlers.offset = XtOffsetOf(kafka_admin_options_object, std);
+    admin_options_object_handlers.offset = offsetof(kafka_admin_options_object, std);
 
     /* NewTopic */
     ce_kafka_new_topic = register_class_RdKafka_Admin_NewTopic();
@@ -692,7 +762,7 @@ void kafka_admin_client_minit(INIT_FUNC_ARGS)
     memcpy(&new_topic_object_handlers, &kafka_default_object_handlers, sizeof(zend_object_handlers));
     new_topic_object_handlers.clone_obj = NULL;
     new_topic_object_handlers.free_obj = new_topic_free;
-    new_topic_object_handlers.offset = XtOffsetOf(kafka_new_topic_object, std);
+    new_topic_object_handlers.offset = offsetof(kafka_new_topic_object, std);
 
     /* DeleteTopic */
     ce_kafka_delete_topic = register_class_RdKafka_Admin_DeleteTopic();
@@ -701,7 +771,7 @@ void kafka_admin_client_minit(INIT_FUNC_ARGS)
     memcpy(&delete_topic_object_handlers, &kafka_default_object_handlers, sizeof(zend_object_handlers));
     delete_topic_object_handlers.clone_obj = NULL;
     delete_topic_object_handlers.free_obj = delete_topic_free;
-    delete_topic_object_handlers.offset = XtOffsetOf(kafka_delete_topic_object, std);
+    delete_topic_object_handlers.offset = offsetof(kafka_delete_topic_object, std);
 
     /* NewPartitions */
     ce_kafka_new_partitions = register_class_RdKafka_Admin_NewPartitions();
@@ -710,7 +780,7 @@ void kafka_admin_client_minit(INIT_FUNC_ARGS)
     memcpy(&new_partitions_object_handlers, &kafka_default_object_handlers, sizeof(zend_object_handlers));
     new_partitions_object_handlers.clone_obj = NULL;
     new_partitions_object_handlers.free_obj = new_partitions_free;
-    new_partitions_object_handlers.offset = XtOffsetOf(kafka_new_partitions_object, std);
+    new_partitions_object_handlers.offset = offsetof(kafka_new_partitions_object, std);
 
     /* TopicResult - no custom object handler needed, uses default */
     ce_kafka_topic_result = register_class_RdKafka_Admin_TopicResult();

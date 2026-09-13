@@ -29,6 +29,37 @@ var_dump($options instanceof RdKafka\Admin\AdminOptions);
 $queue = $producer->newQueue();
 var_dump($queue instanceof RdKafka\Queue);
 
+$defaultTopic = new RdKafka\Admin\NewTopic("test-default", -1, -1);
+var_dump($defaultTopic instanceof RdKafka\Admin\NewTopic);
+
+try {
+    new RdKafka\Admin\NewPartitions("test", -1);
+    echo "FAIL: NewPartitions(-1) did not throw\n";
+} catch (RdKafka\Exception $e) {
+    echo $e->getMessage() . "\n";
+}
+
+try {
+    $topic->setReplicaAssignment(0, []);
+    echo "FAIL: empty broker_ids did not throw\n";
+} catch (RdKafka\Exception $e) {
+    echo $e->getMessage() . "\n";
+}
+
+try {
+    $topic->setReplicaAssignment(0, ["1"]);
+    echo "FAIL: non-int broker_ids did not throw\n";
+} catch (RdKafka\Exception $e) {
+    echo $e->getMessage() . "\n";
+}
+
+try {
+    $topic->setReplicaAssignment(-1, [1]);
+    echo "FAIL: negative partition did not throw\n";
+} catch (RdKafka\Exception $e) {
+    echo $e->getMessage() . "\n";
+}
+
 echo "OK\n";
 --EXPECT--
 bool(true)
@@ -37,4 +68,9 @@ bool(true)
 bool(true)
 bool(true)
 bool(true)
+bool(true)
+new_total_count must not be negative
+broker_ids array must not be empty
+All items in broker_ids must be integers
+partition must not be negative
 OK
